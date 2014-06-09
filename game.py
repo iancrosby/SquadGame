@@ -8,8 +8,8 @@ pygame.init()
 
 #Setting up some initialization stuff
 done=False
-size = [1024,768]
-screen=pygame.display.set_mode(size)
+scr_size = [1024,768]
+screen=pygame.display.set_mode(scr_size)
 pygame.display.set_caption("SquadGame")
 clock=pygame.time.Clock()
 
@@ -24,21 +24,30 @@ player_list = []
 zombie_list = []
 dead_list = []
 
+selected = None
+
 my_dude = creature(10,10,(50,50))
-my_dude.speed = 5
+my_dude.speed = 2.5
 my_dude.range = 60
 my_dude.load_image("images/metal_gear_frame_1.png")
+
+my_dude2 = creature(10,10,(100,50))
+my_dude2.speed = 2.5
+my_dude2.range = 60
+my_dude2.load_image("images/metal_gear_frame_1.png")
+
 zombie1 = creature(10,10,(400,400))
 zombie2 = creature(10,10,(550,300))
 zombie3 = creature(10,10,(350,500))
-zombie2.speed = 2
-zombie3.speed = 2.5
+zombie2.speed = 1
+zombie3.speed = 1.25
 zombie_filepath = "images/zombie_frame_1.png"
 zombie1.load_image(zombie_filepath)
 zombie2.load_image(zombie_filepath)
 zombie3.load_image(zombie_filepath)
 
 player_list.append(my_dude)
+player_list.append(my_dude2)
 zombie_list.append(zombie1)
 zombie_list.append(zombie2)
 zombie_list.append(zombie3)
@@ -48,10 +57,54 @@ destination = (50,50)
 lose = False
 
 # Set up the map
-map1 = Map()
-map1.grid[10][10] = terrain.Wall1()
-map1.grid[10][11] = terrain.Wall1()
-map1.grid[10][12] = terrain.Wall1()
+map1 = Map(40, 30, 20)
+#map1.grid[10][10] = terrain.Wall1()
+#map1.grid[11][10] = terrain.Wall1()
+#map1.grid[12][10] = terrain.Wall1()
+
+map1.grid[12][11] = terrain.Corner_Wall((12*20,11*20))
+map1.grid[12][12] = terrain.Left_Wall((12*20,12*20))
+map1.grid[12][13] = terrain.Left_Wall((12*20,13*20))
+map1.grid[12][14] = terrain.Left_Wall((12*20,14*20))
+map1.grid[12][15] = terrain.Left_Wall((12*20,15*20))
+map1.grid[12][16] = terrain.Left_Wall((12*20,16*20))
+map1.grid[12][17] = terrain.Left_Wall((12*20,17*20))
+map1.grid[12][18] = terrain.Corner_Wall((12*20,18*20))
+
+map1.grid[13][11] = terrain.Top_Wall((13*20,11*20))
+map1.grid[14][11] = terrain.Top_Wall((14*20,11*20))
+map1.grid[15][11] = terrain.Top_Wall((15*20,11*20))
+map1.grid[16][11] = terrain.Top_Wall((16*20,11*20))
+map1.grid[17][11] = terrain.Top_Wall((17*20,11*20))
+
+map1.grid[13][18] = terrain.Bottom_Wall((13*20,18*20))
+map1.grid[14][18] = terrain.Bottom_Wall((14*20,18*20))
+map1.grid[15][18] = terrain.Bottom_Wall((15*20,18*20))
+map1.grid[16][18] = terrain.Bottom_Wall((16*20,18*20))
+map1.grid[17][18] = terrain.Bottom_Wall((17*20,18*20))
+
+map1.grid[18][11] = terrain.Corner_Wall((18*20,11*20))
+map1.grid[18][12] = terrain.Right_Wall((18*20,12*20))
+
+map1.grid[18][15] = terrain.Right_Wall((18*20,15*20))
+map1.grid[18][16] = terrain.Right_Wall((18*20,16*20))
+map1.grid[18][17] = terrain.Right_Wall((18*20,17*20))
+map1.grid[18][18] = terrain.Corner_Wall((18*20,18*20))
+
+
+
+# process list of impassable terrain. Eventually move into the map class in functions.py
+impass_trn_list = []
+
+for list in map1.grid:
+    for trn in list:
+        if hasattr(trn, 'impass_trn'):
+            impass_trn_list.append(trn.impass_trn)
+
+map1.impass_trn = impass_trn_list
+
+
+clock = pygame.time.Clock()
 
 # -------- Main Program Loop -----------
 while done==False:
@@ -65,7 +118,11 @@ while done==False:
             done=True # Flag that we are done so we exit this loop
         if event.type == MOUSEBUTTONDOWN:
             if event.button == 1:
-                destination = event.pos
+                for player in player_list:
+                    if player.rect.collidepoint(event.pos):
+                        selected = player
+            if event.button == 3 and selected != None:
+                selected.destination = event.pos
 
     # ALL EVENT PROCESSING SHOULD GO ABOVE THIS COMMENT
 
@@ -91,12 +148,11 @@ while done==False:
 
     # player move
     for player in player_list:
-        if player.coordinates[2] != destination:
-            player.move(destination, map1)
+        player.move(player.destination, map1)
 
     # zombies chase
     for obj in zombie_list:
-        obj.move(my_dude.coordinates[2], map1)
+        obj.move(my_dude.rect.center, map1)
 
     # zombie attack
     for zombie in zombie_list:
@@ -134,34 +190,46 @@ while done==False:
     trn_y = 0
     for mylist in map1.grid:
         for obj in mylist:
-            pygame.draw.rect(screen, obj.colour, [trn_x, trn_y, 20, 20], 0)
-            trn_x += 20
-        trn_y += 20
-        trn_x = 0
-
-    #draw player creatures
-    for obj in player_list:
-        screen.blit(obj.img, (obj.draw_coordinates[0], obj.draw_coordinates[1]))
-        #draw attacks of player creatures
-        if obj.attk_len_t > 0 and obj.attacking != None:
-            pygame.draw.line(screen, blue, obj.coordinates[2], obj.attacking.coordinates[2], 3)
-
-    # draw zombies
-    for zombie in zombie_list:
-        screen.blit(zombie.img, (zombie.draw_coordinates[0], zombie.draw_coordinates[1]))
-        # draw zombie attacks
-        if zombie.attk_len_t > 0 and zombie.attacking != None:
-            pygame.draw.line(screen, red, zombie.coordinates[2], zombie.attacking.coordinates[2], 3)
+            pygame.draw.rect(screen, obj.colour, ((obj.p), (map1.tile_size, map1.tile_size)), 0)
+            if hasattr(obj, 'impass_trn'):
+                pygame.draw.rect(screen, obj.impass_trn.colour, obj.impass_trn.rect, 0)
+            trn_y += map1.tile_size
+        trn_x += map1.tile_size
+        trn_y = 0
 
     # draw dead creatures
     for obj in dead_list:
-        pygame.draw.ellipse(screen, red, obj.draw_coordinates, 0)
+        pygame.draw.ellipse(screen, red, obj.rect, 0)
+
+    #draw selection circle
+    if selected != None:
+        pygame.draw
+        s_w = selected.rect.w+4
+        s_p = (selected.rect.centerx-(s_w/2)+1, selected.rect.bottom-13)
+        pygame.draw.ellipse(screen, white, (s_p, (s_w, 13)), 2)
+
+    #draw player creatures
+    for obj in player_list:
+        screen.blit(obj.img, (obj.coordinates))
+        #draw attacks of player creatures
+        if obj.attk_len_t > 0 and obj.attacking != None:
+            pygame.draw.line(screen, blue, obj.rect.center, obj.attacking.rect.center, 3)
+
+    # draw zombies
+    for zombie in zombie_list:
+        screen.blit(zombie.img, zombie.coordinates)
+        # draw zombie attacks
+        if zombie.attk_len_t > 0 and zombie.attacking != None:
+            pygame.draw.line(screen, red, zombie.rect.center, zombie.attacking.rect.center, 3)
+
+
 
     #draw a bunch of text. Mostly for debugging now.
     font = pygame.font.Font(None, 25)
     hp_text = font.render("HP = "+str(my_dude.hp),True,black)
-
+    fps_text = font.render("FPS = "+str(clock.get_fps()),True,black)
     screen.blit(hp_text, (20, 20))
+    screen.blit(fps_text, (20, 40))
 
 
     #Game lose text
@@ -175,4 +243,4 @@ while done==False:
 
 
     # Limit to 30 frames per second
-    clock.tick(30)
+    clock.tick(60)

@@ -5,13 +5,6 @@ import terrain
 import pygame
 
 # Setting up some useful functions.
-def check_collision(p, co):
-    '''Check if position p collides with object co'''
-
-    if (p[0] >= co.collision[0][0]) and (p[0] <= co.collision[1][0]) and (p[1] >= co.collision[0][1]) and (p[1] <= co.collision[1][1]):
-        return True
-
-    return False
 
 
 class creature:
@@ -19,8 +12,9 @@ class creature:
 
     def __init__(self, w=1, h=1, p=(0,0)):
 
-        self.update_coordinates(w, h, p)
-        self.speed = 3
+        self.rect = pygame.Rect(p,(w,h))
+        self.update_coordinates(p)
+        self.speed = 1.5
         self.range = 15
         self.attk_cooldown = 20
         self.attk_cooldown_t = 0
@@ -28,25 +22,24 @@ class creature:
         self.attk_len_t = 0
         self.hp = 10
         self.damage = 2
+        self.destination = p
 
     def load_image(self, filepath):
         '''Assign a sprite to be used for this creature'''
 
         self.img = pygame.image.load(filepath).convert()
+        self.rect.size = self.img.get_bounding_rect().size
         self.img.set_colorkey(self.img.get_at((0,0))) #The colour of the top-left pixel is set as transparent
 
+    def update_coordinates(self, p):
 
-    def update_coordinates(self, w, h, p):
-
-        #check that x, y, and p are the correct types
-        if not (isinstance(w, int) and isinstance(h, int) and isinstance(p, tuple)):
+        #check that p is a tuple
+        if not isinstance(p, tuple):
             raise TypeError
 
-        #set new coordinates and collision points
-        self.coordinates = [w, h, (p[0], p[1])]
-        self.draw_coordinates = [p[0]-(float(w)/2), p[1]-(float(w)/2), w, h]
-        #collision points set as top left position and bottom right position
-        self.collision = (p, (p[0]+w, p[1]+h))
+        #set new coordinates
+        self.coordinates = p
+        self.rect.topleft = p
 
     def label(self, text):
         '''Add a label to a box'''
@@ -57,24 +50,28 @@ class creature:
     def move(self, destination, m):
         '''Attempt to move to destination on map m.'''
 
+        destination = destination[0]-self.rect.w/2, destination[1]-self.rect.h/2
         speed = self.speed
-        w, h, (p_x, p_y) = self.coordinates
+        p = self.coordinates
 
-        diff_x = destination[0]-p_x
-        diff_y = destination[1]-p_y
+        diff_x = destination[0]-p[0]
+        diff_y = destination[1]-p[1]
         hyp = math.sqrt(math.pow(diff_x,2) + math.pow(diff_y,2))
 
         if hyp > speed:
             move_x = diff_x * speed / hyp
             move_y = diff_y * speed / hyp
-            new_coords = (p_x+move_x, p_y+move_y)
+            new_coords = (p[0]+move_x, p[1]+move_y)
+
         else:
             new_coords = destination
 
-        if find_terrain((new_coords),m).passable == False:
-            pass
-        else:
-            self.update_coordinates(w, h, new_coords)
+        self.update_coordinates(new_coords)
+
+        for trn in m.impass_trn:
+            if trn.rect.colliderect(self.rect):
+                self.update_coordinates(p) # Move back to old coordinates if new coordinates cause a collision.
+
 
     def choose_target(self, target_list):
 
@@ -98,43 +95,63 @@ class creature:
         target.hp -= self.damage
 
 def distance(obj1, obj2):
-    diff_x = float(obj1.coordinates[2][0]) - obj2.coordinates[2][0]
-    diff_y = float(obj1.coordinates[2][1]) - obj2.coordinates[2][1]
+    diff_x = float(obj1.rect.centerx) - obj2.rect.centerx
+    diff_y = float(obj1.rect.centery) - obj2.rect.centery
     hyp = math.sqrt(math.pow(diff_x,2) + math.pow(diff_y,2))
     return hyp
 
 def find_terrain(p, m):
-    '''Returns the terrain object that occupies coordinates p, on map m'''
+    '''Returns the terrain object that occupies coordinates p, on map m, followed by any impassable terrain object.'''
 
-    if p[0]<581 and p[1]<581:
-        index_x = int(p[0]/20)
-        index_y = int(p[1]/20)
-        return m.grid[index_y][index_x]
+    tsize = m.tile_size
+    num_x = len(m.grid)
+    num_y = len(m.grid[0])
+
+    index_x = int(p[0]/tsize)
+    index_y = int(p[1]/tsize)
+    trn = m.grid[index_x][index_y]
+    impass_trn = None
+
+    if hasattr(trn, "impass_trn"):
+        impass_trn = trn.impass_trn
+
+    if index_x<num_x and index_y<num_y:
+        return (trn, impass_trn)
     else:
-        return m.grid[0][0]
+        return (m.grid[0][0], None)
 
 
 
 class Map(object):
 
-    def __init__(self):
+    def __init__(self, num_tile_x=30, num_tile_y=30, tile_size=20):
 
         map_grid = []
         count1 = 0
         count2 = 0
-        while count1 < 30:
+        while count1 < num_tile_x:
             map_grid.append([])
-            while count2 < 30:
-                map_grid[count1].append(terrain.Terrain())
+            while count2 < num_tile_y:
+                p = (tile_size*count1,tile_size*count2)
+                map_grid[count1].append(terrain.Terrain(p))
                 count2 += 1
             count1 += 1
             count2 = 0
 
         self.grid = map_grid
+        self.tile_size = tile_size
+
+
 
 
 
 if __name__ == "__main__":
+
+    from pygame.locals import *
+    pygame.init()
+    scr_size = [1024,768]
+    screen=pygame.display.set_mode(scr_size)
+
     #some light testing
     test_box = creature(100, 100, (50,50))
     test_position_true = (60, 60)
@@ -143,22 +160,19 @@ if __name__ == "__main__":
     test_w, test_h, test_p = 10, 10, (200,200)
     test_creature = creature(test_w, test_h, test_p)
     test_destination = (250,250)
+    #test_map = Map()
 
 
-    if not check_collision(test_position_true, test_box):
-        raise AssertionError
-        tests_passed = False
 
-    if check_collision(test_position_false, test_box):
-        raise AssertionError
-        tests_passed = False
-
-    test_creature.move(test_destination)
+    #test_creature.move(test_destination, test_map)
+    #test_creature.load_image("images/metal_gear_frame_1.png")
+    #size = test_creature.rect.size
     '''if not (test_creature.coordinates[2][0] == test_p[0] and test_creature.coordinates[2][1] == test_p[1]+1):
         print test_creature.coordinates[2]
         raise AssertionError
         tests_passed = False'''
 
     print "Tests Passed = " + str(tests_passed)
+
 
 #NEXT: write tests for move method
